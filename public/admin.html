@@ -336,7 +336,7 @@
   </div>
 
   <!-- Edit Quiz Modal -->
-  <div id="editQuizModal" class="modal-backdrop">
+  <div id="editQuizModal" class="modal-backdrop" style="display:none;">
     <div class="modal">
       <div class="top">
         <h2 id="editQuizModalTitle" style="margin:0;">Edit Quiz</h2>
@@ -457,4 +457,998 @@
       let v = parseInt((inp?.value || '').trim(), 10);
       if (!Number.isFinite(v)) { if(status) status.textContent = 'Enter a number 1–100.'; return; }
       v = Math.max(1, Math.min(100, v));
-      localStorage.setItem(
+      localStorage.setItem(SETTINGS_KEY_PASS, String(v));
+      STATE.passThresholdPct = v;
+      if (status) { status.textContent = 'Saved ✓'; setTimeout(()=> status.textContent = ' ', 1500); }
+      if (STATE.tokenValid) runAnalysis();
+    }
+    const getPassThreshold = () => STATE.passThresholdPct || 80;
+
+    /* ========== State ========== */
+    const STATE = {
+      page: 1, pageSize: 20, totalPages: 1, lastResults: [],
+      quizOptionsReady: false, tokenValid:false, menuPopulated:false,
+      passThresholdPct:80,
+      clientFilter: null // { items:[], page:1, totalPages:N } when title filter is active
+    };
+    let CURRENT_TOKEN = '';
+
+    function showError(msg){ const box = $('#errorBox'); box.textContent = msg || 'Something went wrong.'; box.style.display = 'block'; }
+    function clearError(){ const box = $('#errorBox'); box.textContent = ''; box.style.display = 'none'; }
+
+    /* ========== Quiz Management State and Functions ========== */
+    let quizzes = [];
+    let editingQuiz = null;
+    let questionCounter = 0;
+
+    /* ========== Fetch helpers ========== */
+    async function fetchPageSummaries({page, pageSize, since, token}) {
+      const qs = new URLSearchParams({ page, page_size: pageSize, ts: Date.now().toString() });
+      if (since) qs.set('since', since);
+      const res = await fetch('/api/admin/get-results?' + qs.toString(), { cache: 'no-store', headers: { 'x-admin-token': token } });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      return json;
+    }
+    async function fetchAllSummaries(token){
+      const since = getSelectedDateISO() || '';
+      const first = await fetchPageSummaries({ page: 1, pageSize: 200, since, token });
+      let all = Array.isArray(first.results) ? first.results.slice() : [];
+      const totalPages = first.total_pages || 1;
+      for (let p = 2; p <= totalPages; p++){
+        const next = await fetchPageSummaries({ page: p, pageSize: 200, since, token });
+        if (Array.isArray(next.results)) all.push(...next.results);
+      }
+      return { all, since };
+    }
+    async function fetchAttemptDetail(id){
+      const res = await fetch('/api/admin/get-result?id=' + encodeURIComponent(id), { cache: 'no-store', headers: { 'x-admin-token': CURRENT_TOKEN } });
+      const j = await res.json();
+      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Failed attempt fetch');
+      return j.result;
+    }
+
+    /* ========== Quiz filter dropdown ========== */
+    function buildQuizMenuFrom(all){
+      const menu = document.getElementById('quizMenu'); if (!menu) return;
+      menu.innerHTML = `
+        <div id="quizItems"></div>
+        <div class="quiz-menu-actions">
+          <button class="btn-link" id="selectAllBtn" type="button">Select all</button>
+          <button class="btn-link" id="clearAllBtn" type="button">Clear</button>
+          <button class="btn-link" id="applyFilterBtn" type="button">Apply</button>
+        </div>
+      `;
+      const itemsWrap = document.getElementById('quizItems');
+      const titles = Array.from(new Set((all || []).map(r => r.title || '').filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+      titles.forEach((t, i) => {
+        const id = `qopt_${i}`;
+        const row = document.createElement('label');
+        row.className = 'quiz-opt'; row.setAttribute('role','option');
+        row.innerHTML = `<input type="checkbox" name="quizTitle" value="${t.replace(/"/g,'&quot;')}" id="${id}"><span>${t}</span>`;
+        itemsWrap.appendChild(row);
+      });
+      $('#selectAllBtn').addEventListener('click', () => { menu.querySelectorAll('input[name="quizTitle"]').forEach(cb => cb.checked = true); });
+      $('#clearAllBtn').addEventListener('click', () => { menu.querySelectorAll('input[name="quizTitle"]').forEach(cb => cb.checked = false); });
+      $('#applyFilterBtn').addEventListener('click', () => { updateFilterButtonLabel(); hideMenu(); load(1); });
+      updateFilterButtonLabel();
+    }
+    function getSelectedTitles(){ const menu = document.getElementById('quizMenu'); if (!menu) return []; return Array.from(menu.querySelectorAll('input[name="quizTitle"]:checked')).map(cb => cb.value); }
+    function updateFilterButtonLabel(){
+      const label = document.getElementById('quizFilterLabel');
+      const total = document.querySelectorAll('#quizMenu input[name="quizTitle"]').length;
+      const selected = getSelectedTitles();
+      if (selected.length === 0 || selected.length === total) label.textContent = 'All quizzes';
+      else if (selected.length === 1) label.textContent = selected[0];
+      else label.textContent = `${selected.length} selected`;
+    }
+    function toggleMenu(){
+      const btn = document.getElementById('quizFilterBtn'); const menu = document.getElementById('quizMenu');
+      const open = menu.style.display === 'block'; if (open) { hideMenu(); } else { menu.style.display = 'block'; btn.setAttribute('aria-expanded','true'); }
+    }
+    function hideMenu(){
+      const btn = document.getElementById('quizFilterBtn'); const menu = document.getElementById('quizMenu');
+      if (!menu || !btn) return; menu.style.display = 'none'; btn.setAttribute('aria-expanded','false');
+    }
+
+    /* ========== Table rendering helpers ========== */
+    function renderTableRows(rows){
+      const tbody = $('#tbl tbody'); tbody.innerHTML = '';
+      rows.forEach(r => {
+        const correctTotal = (Number.isFinite(r.correct) && Number.isFinite(r.total)) ? `${r.correct}/${r.total}` : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${fmtUS(r.received_at)}</td>
+          <td>${r.user_name || ''}</td>
+          <td>${(r.scorePct ?? '')}</td>
+          <td>${correctTotal}</td>
+          <td>${r.title || ''}</td>
+          <td><button class="primary detailsBtn" type="button" data-id="${r.id}">View</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      document.querySelectorAll('.detailsBtn').forEach(btn => { btn.addEventListener('click', () => openDetails(btn.getAttribute('data-id'))); });
+    }
+
+    function enterClientPagedMode(items){
+      STATE.clientFilter = {
+        items: items.slice(),
+        page: 1,
+        totalPages: Math.max(1, Math.ceil(items.length / STATE.pageSize))
+      };
+      renderClientPage(1);
+    }
+    function clearClientPagedMode(){ STATE.clientFilter = null; }
+
+    function renderClientPage(page){
+      if (!STATE.clientFilter) return;
+      const items = STATE.clientFilter.items;
+      const totalPages = Math.max(1, Math.ceil(items.length / STATE.pageSize));
+      const p = Math.min(Math.max(1, page), totalPages);
+      STATE.clientFilter.page = p;
+      STATE.clientFilter.totalPages = totalPages;
+
+      const start = (p - 1) * STATE.pageSize;
+      const slice = items.slice(start, start + STATE.pageSize);
+      renderTableRows(slice);
+
+      $('#meta').textContent = `${items.length} total attempt(s) • showing ${slice.length} on this page after filter`;
+      $('#pageInfo').textContent = `Page ${p} of ${totalPages}`;
+      $('#prevBtn').disabled = p <= 1;
+      $('#nextBtn').disabled = p >= totalPages;
+    }
+
+    /* ========== Results page ========== */
+    async function load(pageOverride){
+      clearError();
+      const token = $('#adminToken') ? $('#adminToken').value.trim() : '';
+      CURRENT_TOKEN = token;
+
+      const singleDay = getSelectedDateISO(); // '' or YYYY-MM-DD
+      const selectedTitles = getSelectedTitles();
+
+      // --- Single-day mode (local calendar day) ---
+      if (singleDay) {
+        let summaries;
+        try {
+          const { all } = await fetchAllSummaries(token);
+          summaries = all;
+        } catch(e){
+          console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load results.'); return;
+        }
+        STATE.tokenValid = true; populateMenuItems();
+
+        if (!STATE.quizOptionsReady) {
+          try { buildQuizMenuFrom(summaries); STATE.quizOptionsReady = true; } catch(e){ console.warn('Could not build quiz list', e); }
+        }
+
+        let filtered = summaries.filter(r => dayKeyLocal(r.received_at) === singleDay);
+        if (selectedTitles.length){
+          const set = new Set(selectedTitles);
+          filtered = filtered.filter(r => set.has(r.title || ''));
+        }
+
+        STATE.lastResults = filtered.slice();
+        renderTableRows(filtered);
+
+        $('#meta').textContent = `${filtered.length} attempt(s) • date: ${singleDay}`;
+        $('#pageInfo').textContent = `Single day`;
+        $('#prevBtn').disabled = true; $('#nextBtn').disabled = true;
+
+        if (!location.hash) location.hash = '#admin/results';
+        handleHashRoute();
+        if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
+        return;
+      }
+
+      // --- Title filter active? -> fetch ALL, client-side paginate ---
+      if (selectedTitles.length){
+        try{
+          const { all } = await fetchAllSummaries(token);
+          STATE.tokenValid = true; populateMenuItems();
+          if (!STATE.quizOptionsReady){ try { buildQuizMenuFrom(all); STATE.quizOptionsReady = true; } catch(e){} }
+
+          const set = new Set(selectedTitles);
+          const filtered = all.filter(r => set.has(r.title || ''));
+          STATE.lastResults = filtered.slice();
+          enterClientPagedMode(filtered);
+        }catch(e){
+          console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load filtered results.');
+        }
+        if (!location.hash) location.hash = '#admin/results';
+        handleHashRoute();
+        if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
+        return;
+      } else {
+        // No title filter -> server pagination
+        clearClientPagedMode();
+      }
+
+      // --- Normal paged mode via server ---
+      let res, json;
+      try {
+        const qs = new URLSearchParams({ page: (pageOverride || STATE.page || 1), page_size: STATE.pageSize, ts: Date.now().toString() });
+        res = await fetch('/api/admin/get-results?' + qs.toString(), { cache: 'no-store', headers: { 'x-admin-token': token } });
+        json = await res.json();
+      } catch (e) { console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load results.'); return; }
+      if (!res.ok || !json?.ok) { STATE.tokenValid=false; clearMenuItems(); showError(json?.error || `Request failed (${res.status})`); return; }
+
+      STATE.tokenValid=true; populateMenuItems();
+      STATE.page = json.page || 1; STATE.pageSize = json.page_size || 20; STATE.totalPages = json.total_pages || 1;
+      STATE.lastResults = Array.isArray(json.results) ? json.results : [];
+
+      if (!STATE.quizOptionsReady) {
+        try { const { all } = await fetchAllSummaries(token); buildQuizMenuFrom(all); STATE.quizOptionsReady = true; }
+        catch(e){ console.warn('Could not build quiz list', e); }
+      }
+
+      renderTableRows(STATE.lastResults);
+
+      $('#meta').textContent = `${json.count || 0} total attempt(s) • showing ${STATE.lastResults.length} on this page after filter`;
+      $('#pageInfo').textContent = `Page ${STATE.page} of ${STATE.totalPages}`;
+      $('#prevBtn').disabled = STATE.page <= 1; $('#nextBtn').disabled = STATE.page >= STATE.totalPages;
+
+      if (!location.hash) location.hash = '#admin/results';
+      handleHashRoute();
+      if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
+      
+      // Initialize quiz management if we're on the quizzes page
+      if (document.getElementById('page-quizzes')?.classList.contains('active')) {
+        initializeQuizManagement();
+      }
+    }
+
+    // Modal
+    async function openDetails(id){
+      try{
+        const res = await fetch('/api/admin/get-result?id=' + encodeURIComponent(id), { cache: 'no-store', headers: { 'x-admin-token': CURRENT_TOKEN } });
+        const j = await res.json();
+        if(!res.ok || !j?.ok){ showError(j?.error || 'Failed to load attempt'); return; }
+        const a = j.result;
+        $('#mdTitle').textContent = a.title || 'Attempt Details';
+        $('#mdMeta').innerHTML = `
+          <span class="chip">User: <strong>${a.user_name || '—'}</strong></span>
+          <span class="chip">When: <strong>${fmtUS(a.received_at)}</strong></span>
+          <span class="chip">Score: <strong>${a.scorePct ?? ''}%</strong></span>
+          <span class="chip">Correct/Total: <strong>${a.correct}/${a.total}</strong></span>
+        `;
+        const rows = Array.isArray(a.rows) ? a.rows : [];
+        const body = rows.map(r => `
+          <div class="qbox">
+            <div class="headerRow">
+              <span class="pill ${r.is_correct ? 'ok' : 'bad'}">${r.is_correct ? 'Correct' : 'Incorrect'}</span>
+              <span class="muted">Q${r.index ?? ''}${r.category ? ' • ' + r.category : ''}</span>
+            </div>
+            <h3 class="qtitle">${r.question}</h3>
+            <div class="muted"><strong>Your answer:</strong> ${r.user_answer || '<em>Blank</em>'}</div>
+            <div class="muted"><strong>Correct answer:</strong> ${r.correct_answer || ''}</div>
+          </div>
+        `).join('');
+        $('#mdBody').innerHTML = body || '<div class="muted">No per-question data was saved for this attempt.</div>';
+        showModal(true);
+      } catch(e){ console.error(e); showError('Error opening details.'); }
+    }
+    function showModal(on){ const bd = $('#backdrop'); if(on){ bd.style.display='flex'; bd.setAttribute('aria-hidden','false'); } else { bd.style.display='none'; bd.setAttribute('aria-hidden','true'); } }
+
+    // Export (respects single-day + quiz filters; uses local-day filter)
+    async function exportAllCSV(){
+      clearError();
+      const btn = document.getElementById('exportBtn') || document.getElementById('exportPageBtn');
+      const token = $('#adminToken') ? $('#adminToken').value.trim() : '';
+      if (!token) { showError('Enter your admin token, then click Export.'); return; }
+      const prevTxt = btn.textContent; btn.textContent = 'Exporting...'; btn.disabled = true;
+      try{
+        const { all: summaries } = await fetchAllSummaries(token);
+        const selectedTitles = getSelectedTitles();
+        const singleDay = getSelectedDateISO();
+
+        let filtered = summaries;
+        if (singleDay) filtered = filtered.filter(r => dayKeyLocal(r.received_at) === singleDay);
+        if (selectedTitles.length){ const set = new Set(selectedTitles); filtered = filtered.filter(r => set.has(r.title || '')); }
+        if (!filtered.length){ showError('No results match the current filters.'); return; }
+
+        const attempts = await mapWithConcurrency(filtered, (s) => fetchAttemptDetail(s.id).catch(() => ({ ...s, rows: [] })), 10);
+        const maxQ = attempts.reduce((m,a)=> Math.max(m, Array.isArray(a.rows) ? a.rows.length : 0), 0);
+        const header = ['date','user','score','total','title', ...Array.from({length:maxQ}, (_,i)=>`Q${i+1}`)];
+        const lines = [ header.map(csvEscape).join(',') ];
+        attempts.forEach(a => {
+          const date = fmtISO(a.received_at);
+          const user = a.user_name || '';
+          const score = Number.isFinite(a.correct) ? a.correct : '';
+          const total = Number.isFinite(a.total) ? a.total : '';
+          const title = a.title || '';
+          const qCells = [];
+          for (let i=0; i<maxQ; i++){
+            const r = (a.rows && a.rows[i]) ? a.rows[i] : null;
+            qCells.push(csvEscape((() => {
+              if (!r) return '';
+              const t = (r.type || '').toLowerCase();
+              if (t === 'true_false'){
+                const v = String(r.user_answer ?? '').toLowerCase();
+                if (v === 'true' || v === 't') return 'T';
+                if (v === 'false' || v === 'f') return 'F';
+                return '';
+              }
+              if (Number.isFinite(r.answer_index)) return String.fromCharCode(65 + r.answer_index);
+              if (typeof r.answer_letter === 'string') return r.answer_letter.toUpperCase();
+              return r.user_answer || '';
+            })()));
+          }
+          lines.push([csvEscape(date), csvEscape(user), csvEscape(score), csvEscape(total), csvEscape(title), ...qCells].join(','));
+        });
+        const csv = lines.join('\n'); const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+        const stamp = new Date().toISOString().slice(0,10);
+        const chosen = (getSelectedTitles()).map(s=>s.replace(/[^a-z0-9_-]+/gi,'-')).join('+');
+        const dayPart = singleDay ? `_on-${singleDay}` : '';
+        const name = `quiz_export_${stamp}${dayPart}${chosen ? `_titles-${chosen}` : ''}.csv`;
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+      } catch(err){ console.error(err); showError('Failed to export CSV.'); }
+      finally { btn.textContent = prevTxt; btn.disabled = false; }
+    }
+
+    /* ========== Analysis (KPIs) ========== */
+    function summarizeAttempts(attempts, passPct){
+      const scores = attempts.map(a => Number(a.scorePct)).filter(x => Number.isFinite(x));
+      const durations = attempts.map(a => Number(a.duration_ms)).filter(x => Number.isFinite(x) && x > 0);
+      const users = attempts.map(a => (a.user_name || '').trim()).filter(Boolean);
+      const uniqueUsers = new Set(users);
+      const byUserTitle = new Map();
+      attempts.forEach(a => {
+        const key = `${(a.user_name||'').trim()}|${a.title||''}`;
+        const arr = byUserTitle.get(key) || [];
+        arr.push(a);
+        byUserTitle.set(key, arr);
+      });
+      let firstTries = 0, firstTryPasses = 0, retakePairs = 0;
+      byUserTitle.forEach(arr => {
+        arr.sort((x,y) => new Date(x.received_at) - new Date(y.received_at));
+        const first = arr[0];
+        if (first && Number.isFinite(first.scorePct)) {
+          firstTries++;
+          if (first.scorePct >= passPct) firstTryPasses++;
+        }
+        if (arr.length >= 2) retakePairs++;
+      });
+
+      const completed = attempts.length;
+      const passCount = attempts.filter(a => Number.isFinite(a.scorePct) && a.scorePct >= passPct).length;
+
+      return {
+        completed,
+        passRate: completed ? passCount / completed : null,
+        avgScore: mean(scores),
+        p90Score: quantile(scores, 0.90),
+        medianTimeMs: durations.length ? median(durations) : null,
+        firstTryPassRate: firstTries ? (firstTryPasses / firstTries) : null,
+        retakeRate: byUserTitle.size ? (retakePairs / byUserTitle.size) : null,
+        uniqueUsers: uniqueUsers.size
+      };
+    }
+    function renderKPIs(k){
+      const el = document.getElementById('kpiGrid');
+      const fmtMs = (ms) => {
+        if (!Number.isFinite(ms)) return '—';
+        const s = Math.round(ms/1000);
+        const m = Math.floor(s/60), r = s % 60;
+        return m ? `${m}m ${r}s` : `${r}s`;
+      };
+      el.innerHTML = `
+        <div class="kpi"><div class="label">Completions</div><div class="value">${k.completed ?? 0}</div><div class="sub">Attempts</div></div>
+        <div class="kpi"><div class="label">Pass Rate</div><div class="value">${k.passRate==null?'—':(Math.round(k.passRate*1000)/10)+'%'}</div><div class="sub">Current filter</div></div>
+        <div class="kpi"><div class="label">Avg Score</div><div class="value">${k.avgScore==null?'—':(Math.round(k.avgScore*10)/10)+'%'}</div><div class="sub">Across attempts</div></div>
+        <div class="kpi"><div class="label">P90 Score</div><div class="value">${k.p90Score==null?'—':(Math.round(k.p90Score*10)/10)+'%'}</div><div class="sub">High performers</div></div>
+        <div class="kpi"><div class="label">Median Time</div><div class="value">${fmtMs(k.medianTimeMs)}</div><div class="sub">If duration_ms recorded</div></div>
+        <div class="kpi"><div class="label">First-try Pass</div><div class="value">${k.firstTryPassRate==null?'—':(Math.round(k.firstTryPassRate*1000)/10)+'%'}</div><div class="sub">Earliest attempt per user×quiz</div></div>
+        <div class="kpi"><div class="label">Retake Rate</div><div class="value">${k.retakeRate==null?'—':(Math.round(k.retakeRate*1000)/10)+'%'}</div><div class="sub">Users with ≥2 attempts (per quiz)</div></div>
+        <div class="kpi"><div class="label">Unique Users</div><div class="value">${k.uniqueUsers ?? 0}</div><div class="sub">In current filter</div></div>
+      `;
+    }
+    function runAnalysis(){
+      if (!STATE.tokenValid){ showError('Enter your admin token and click Load first.'); return; }
+      clearError();
+
+      const token = CURRENT_TOKEN;
+      const singleDay = getSelectedDateISO(); // '' or YYYY-MM-DD
+
+      fetchAllSummaries(token)
+        .then(({ all }) => {
+          const selectedTitles = getSelectedTitles();
+          let filtered = selectedTitles.length
+            ? all.filter(r => selectedTitles.includes(r.title || ''))
+            : all;
+
+          // Honor single-day filter (LOCAL calendar day)
+          if (singleDay) {
+            filtered = filtered.filter(r => dayKeyLocal(r.received_at) === singleDay);
+          }
+
+          const passPct = getPassThreshold();
+          const kpis = summarizeAttempts(filtered, passPct);
+          renderKPIs(kpis);
+
+          // Summary string
+          const days = singleDay
+            ? 1
+            : new Set(filtered.map(a => dayKeyLocal(a.received_at)).filter(Boolean)).size;
+
+          const summary = singleDay
+            ? `${filtered.length} attempt(s) on ${singleDay}. Pass threshold: ${passPct}%`
+            : `${filtered.length} attempt(s) across ${days} day(s). Pass threshold: ${passPct}%`;
+
+          const sumEl = document.getElementById('analysisSummary');
+          if (sumEl) sumEl.textContent = summary;
+        })
+        .catch(err => {
+          console.error(err);
+          showError('Failed to compute analytics.');
+        });
+    }
+
+    /* ========== Quiz Management Functions ========== */
+    function initializeQuizManagement() {
+      setupQuizTabs();
+      setupQuizFormHandlers();
+      refreshQuizList();
+    }
+
+    function setupQuizTabs() {
+      document.querySelectorAll('.quiz-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+          const targetTab = this.dataset.tab;
+          
+          // Update tab active state
+          document.querySelectorAll('.quiz-tab').forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Update content active state
+          document.querySelectorAll('.quiz-tab-content').forEach(content => {
+            content.style.display = 'none';
+          });
+          
+          if (targetTab === 'list') {
+            document.getElementById('quiz-list').style.display = 'block';
+          } else if (targetTab === 'create') {
+            document.getElementById('quiz-create').style.display = 'block';
+          }
+        });
+      });
+    }
+
+    function setupQuizFormHandlers() {
+      const createForm = document.getElementById('quizForm');
+      if (createForm) {
+        createForm.addEventListener('submit', handleCreateQuiz);
+      }
+      
+      const editForm = document.getElementById('editQuizForm');
+      if (editForm) {
+        editForm.addEventListener('submit', handleEditQuiz);
+      }
+    }
+
+    async function refreshQuizList() {
+      try {
+        showQuizMessage('Loading quizzes...', 'status');
+        
+        // Load quizzes from your existing test files
+        quizzes = await loadExistingQuizzes();
+        
+        renderQuizList();
+        updateQuizStats();
+        showQuizMessage(`Loaded ${quizzes.length} quizzes`, 'success');
+      } catch (error) {
+        showQuizMessage('Failed to load quizzes: ' + error.message, 'error');
+      }
+    }
+
+    async function loadExistingQuizzes() {
+      // For now, we'll load the existing quiz files
+      // In production, you'd create an API endpoint to list all quizzes
+      const quizIds = ['quiz_test', 'ops_mastery']; // Add more as needed
+      const loadedQuizzes = [];
+      
+      for (const id of quizIds) {
+        try {
+          const response = await fetch(`/api/tests/${id}`, { cache: 'no-store' });
+          if (response.ok) {
+            const quiz = await response.json();
+            loadedQuizzes.push(quiz);
+          }
+        } catch (e) {
+          console.warn(`Failed to load quiz ${id}:`, e);
+        }
+      }
+      
+      return loadedQuizzes;
+    }
+
+    function renderQuizList() {
+      const container = document.getElementById('quizListContainer');
+      
+      if (quizzes.length === 0) {
+        container.innerHTML = '<div class="meta">No quizzes found. Create your first quiz to get started.</div>';
+        return;
+      }
+      
+      container.innerHTML = quizzes.map(quiz => `
+        <div class="quiz-item">
+          <div class="quiz-header">
+            <div>
+              <h3 style="margin:0 0 4px;">${quiz.title || 'Untitled Quiz'}</h3>
+              <div class="meta">ID: ${quiz.test_id} • ${quiz.questions?.length || 0} questions</div>
+              ${quiz.description ? `<div class="meta" style="margin-top:4px;">${quiz.description}</div>` : ''}
+            </div>
+            <div class="quiz-actions">
+              <button onclick="editQuiz('${quiz.test_id}')" class="secondary" style="font-size:14px; padding:6px 12px;">Edit</button>
+              <button onclick="duplicateQuiz('${quiz.test_id}')" class="warning" style="font-size:14px; padding:6px 12px;">Duplicate</button>
+              <button onclick="deleteQuiz('${quiz.test_id}')" class="danger" style="font-size:14px; padding:6px 12px;">Delete</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateQuizStats() {
+      const totalQuizzes = quizzes.length;
+      const totalQuestions = quizzes.reduce((sum, quiz) => sum + (quiz.questions?.length || 0), 0);
+      const avgQuestions = totalQuizzes > 0 ? Math.round(totalQuestions / totalQuizzes) : 0;
+      
+      document.getElementById('totalQuizzes').textContent = totalQuizzes;
+      document.getElementById('totalQuestions').textContent = totalQuestions;
+      document.getElementById('avgQuestionsPerQuiz').textContent = avgQuestions;
+      document.getElementById('quizListStatus').textContent = `${totalQuizzes} quiz${totalQuizzes !== 1 ? 'es' : ''} found`;
+    }
+
+    window.showCreateTab = function() {
+      document.querySelector('.quiz-tab[data-tab="create"]').click();
+    };
+
+    window.addQuestion = function() {
+      const container = document.getElementById('questionsList');
+      const questionId = 'q' + (++questionCounter);
+      
+      const questionHtml = createQuestionHTML(questionId, '', {
+        type: 'multiple_choice',
+        text: '',
+        options: ['', '', '', ''],
+        answer: '',
+        explanation: ''
+      });
+      
+      container.insertAdjacentHTML('beforeend', questionHtml);
+    };
+
+    function createQuestionHTML(questionId, prefix = '', question = {}) {
+      const baseId = prefix + questionId;
+      const questionNum = questionId.replace(/\D/g, '');
+      
+      return `
+        <div class="question-item" data-question-id="${questionId}">
+          <div class="question-header">
+            <h4 style="margin:0;">Question ${questionNum}</h4>
+            <button type="button" onclick="removeQuestion('${questionId}')" class="danger" style="font-size:12px; padding:4px 8px;">Remove</button>
+          </div>
+          
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-weight:600;">Question Type</label>
+            <select onchange="updateQuestionType('${baseId}', this.value)" style="width:200px;">
+              <option value="multiple_choice" ${question.type === 'multiple_choice' ? 'selected' : ''}>Multiple Choice</option>
+              <option value="true_false" ${question.type === 'true_false' ? 'selected' : ''}>True/False</option>
+              <option value="short_answer" ${question.type === 'short_answer' ? 'selected' : ''}>Short Answer</option>
+            </select>
+          </div>
+          
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-weight:600;">Question Text</label>
+            <textarea id="${baseId}Text" required style="width:100%; min-height:80px;">${question.text || ''}</textarea>
+          </div>
+          
+          <div id="${baseId}Options" class="${question.type === 'short_answer' ? 'hidden' : ''}" style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:8px; font-weight:600;">Answer Options</label>
+            <div id="${baseId}OptionsList">
+              ${question.type === 'true_false' ? 
+                createTrueFalseOptions(baseId, question.answer) : 
+                createMultipleChoiceOptions(baseId, question.options, question.answer)
+              }
+            </div>
+            ${question.type === 'multiple_choice' ? 
+              `<button type="button" onclick="addOption('${baseId}')" class="secondary" style="font-size:14px; padding:6px 12px; margin-top:8px;">Add Option</button>` : 
+              ''
+            }
+          </div>
+          
+          <div id="${baseId}ShortAnswer" class="${question.type !== 'short_answer' ? 'hidden' : ''}" style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-weight:600;">Correct Answer(s)</label>
+            <input type="text" id="${baseId}Answer" placeholder="Enter correct answer (or multiple answers separated by |)" value="${Array.isArray(question.answer) ? question.answer.join(' | ') : question.answer || ''}" style="width:100%;">
+            <div class="meta">For multiple acceptable answers, separate with |</div>
+          </div>
+          
+          <div style="margin-bottom:12px;">
+            <label style="display:block; margin-bottom:4px; font-weight:600;">Explanation (Optional)</label>
+            <textarea id="${baseId}Explanation" style="width:100%; min-height:60px;">${question.explanation || ''}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    function createMultipleChoiceOptions(baseId, options = ['', '', '', ''], correctAnswer = '') {
+      return options.map((option, index) => `
+        <div class="option-input">
+          <input type="radio" name="${baseId}Answer" value="${option}" ${option === correctAnswer ? 'checked' : ''}>
+          <input type="text" placeholder="Option ${index + 1}" value="${option}" onchange="updateOptionValue('${baseId}', ${index}, this.value)" style="flex:1;">
+          ${options.length > 2 ? `<button type="button" onclick="removeOption('${baseId}', ${index})" class="danger" style="font-size:12px; padding:4px 8px;">Remove</button>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function createTrueFalseOptions(baseId, correctAnswer = '') {
+      return `
+        <div class="option-input">
+          <input type="radio" name="${baseId}Answer" value="true" ${correctAnswer === true || correctAnswer === 'true' ? 'checked' : ''}>
+          <span>True</span>
+        </div>
+        <div class="option-input">
+          <input type="radio" name="${baseId}Answer" value="false" ${correctAnswer === false || correctAnswer === 'false' ? 'checked' : ''}>
+          <span>False</span>
+        </div>
+      `;
+    }
+
+    window.updateQuestionType = function(baseId, type) {
+      const optionsDiv = document.getElementById(baseId + 'Options');
+      const shortAnswerDiv = document.getElementById(baseId + 'ShortAnswer');
+      const optionsList = document.getElementById(baseId + 'OptionsList');
+      
+      if (type === 'short_answer') {
+        optionsDiv.classList.add('hidden');
+        shortAnswerDiv.classList.remove('hidden');
+      } else {
+        optionsDiv.classList.remove('hidden');
+        shortAnswerDiv.classList.add('hidden');
+        
+        if (type === 'true_false') {
+          optionsList.innerHTML = createTrueFalseOptions(baseId);
+        } else if (type === 'multiple_choice') {
+          optionsList.innerHTML = createMultipleChoiceOptions(baseId);
+        }
+      }
+    };
+
+    window.removeQuestion = function(questionId) {
+      const element = document.querySelector(`[data-question-id="${questionId}"]`);
+      if (element) {
+        element.remove();
+      }
+    };
+
+    window.addOption = function(baseId) {
+      const optionsList = document.getElementById(baseId + 'OptionsList');
+      const currentOptions = optionsList.querySelectorAll('.option-input');
+      const newIndex = currentOptions.length;
+      
+      const newOption = `
+        <div class="option-input">
+          <input type="radio" name="${baseId}Answer" value="">
+          <input type="text" placeholder="Option ${newIndex + 1}" onchange="updateOptionValue('${baseId}', ${newIndex}, this.value)" style="flex:1;">
+          <button type="button" onclick="removeOption('${baseId}', ${newIndex})" class="danger" style="font-size:12px; padding:4px 8px;">Remove</button>
+        </div>
+      `;
+      
+      optionsList.insertAdjacentHTML('beforeend', newOption);
+    };
+
+    window.updateOptionValue = function(baseId, index, value) {
+      const radios = document.querySelectorAll(`input[name="${baseId}Answer"][type="radio"]`);
+      if (radios[index]) {
+        radios[index].value = value;
+      }
+    };
+
+    window.removeOption = function(baseId, index) {
+      const optionsList = document.getElementById(baseId + 'OptionsList');
+      const options = optionsList.querySelectorAll('.option-input');
+      if (options.length > 2 && options[index]) {
+        options[index].remove();
+      }
+    };
+
+    async function handleCreateQuiz(event) {
+      event.preventDefault();
+      
+      try {
+        const quizData = collectQuizData('');
+        
+        // Validate quiz data
+        if (!quizData.test_id || !quizData.title) {
+          throw new Error('Quiz ID and Title are required');
+        }
+        
+        if (quizzes.find(q => q.test_id === quizData.test_id)) {
+          throw new Error('A quiz with this ID already exists');
+        }
+        
+        if (quizData.questions.length === 0) {
+          throw new Error('At least one question is required');
+        }
+        
+        // For demo purposes, we'll just add to local array
+        // In production, this would POST to an API endpoint
+        await saveQuizData(quizData);
+        
+        quizzes.push(quizData);
+        renderQuizList();
+        updateQuizStats();
+        clearQuizForm();
+        showQuizMessage('Quiz created successfully!', 'success');
+        
+        // Switch back to list tab
+        document.querySelector('.quiz-tab[data-tab="list"]').click();
+        
+      } catch (error) {
+        showQuizMessage(error.message, 'error');
+      }
+    }
+
+    function collectQuizData(prefix) {
+      const quizId = document.getElementById(prefix + 'quizId').value.trim();
+      const title = document.getElementById(prefix + 'quizTitle').value.trim();
+      const description = document.getElementById(prefix + 'quizDescription').value.trim();
+      
+      const questions = [];
+      const questionElements = document.querySelectorAll(`#${prefix}questionsList .question-item`);
+      
+      questionElements.forEach((element, index) => {
+        const questionId = element.dataset.questionId;
+        const baseId = prefix + questionId;
+        
+        const typeSelect = element.querySelector('select');
+        const type = typeSelect ? typeSelect.value : 'multiple_choice';
+        
+        const textArea = document.getElementById(baseId + 'Text');
+        const text = textArea ? textArea.value.trim() : '';
+        
+        const explanationArea = document.getElementById(baseId + 'Explanation');
+        const explanation = explanationArea ? explanationArea.value.trim() : '';
+        
+        let answer = '';
+        let options = null;
+        
+        if (type === 'multiple_choice') {
+          const checkedRadio = element.querySelector(`input[name="${baseId}Answer"]:checked`);
+          answer = checkedRadio ? checkedRadio.value : '';
+          
+          const optionInputs = element.querySelectorAll('.option-input input[type="text"]');
+          options = Array.from(optionInputs).map(input => input.value.trim()).filter(Boolean);
+        } else if (type === 'true_false') {
+          const checkedRadio = element.querySelector(`input[name="${baseId}Answer"]:checked`);
+          answer = checkedRadio ? checkedRadio.value === 'true' : false;
+        } else if (type === 'short_answer') {
+          const answerInput = document.getElementById(baseId + 'Answer');
+          const answerText = answerInput ? answerInput.value.trim() : '';
+          answer = answerText.includes('|') ? answerText.split('|').map(s => s.trim()) : answerText;
+        }
+        
+        if (text) {
+          const question = {
+            id: questionId,
+            type,
+            text,
+            answer,
+            explanation
+          };
+          
+          if (options) {
+            question.options = options;
+          }
+          
+          questions.push(question);
+        }
+      });
+      
+      return {
+        test_id: quizId,
+        title,
+        description,
+        questions
+      };
+    }
+
+    async function saveQuizData(quizData) {
+      // In production, you would implement an API endpoint to save quiz data
+      // For now, we'll simulate success
+      console.log('Saving quiz:', quizData);
+      return Promise.resolve();
+    }
+
+    window.clearQuizForm = function() {
+      document.getElementById('quizId').value = '';
+      document.getElementById('quizTitle').value = '';
+      document.getElementById('quizDescription').value = '';
+      document.getElementById('questionsList').innerHTML = '';
+      questionCounter = 0;
+    };
+
+    function showQuizMessage(message, type) {
+      const errorEl = document.getElementById('quizErrorMsg');
+      const successEl = document.getElementById('quizSuccessMsg');
+      const statusEl = document.getElementById('quizListStatus');
+      
+      // Clear all messages first
+      errorEl.style.display = 'none';
+      successEl.style.display = 'none';
+      
+      if (type === 'error') {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+      } else if (type === 'success') {
+        successEl.textContent = message;
+        successEl.style.display = 'block';
+        setTimeout(() => { successEl.style.display = 'none'; }, 3000);
+      } else if (type === 'status' && statusEl) {
+        statusEl.textContent = message;
+      }
+    }
+
+    // Placeholder functions for edit/duplicate/delete
+    window.editQuiz = function(quizId) {
+      showQuizMessage('Edit functionality coming soon!', 'error');
+    };
+
+    window.duplicateQuiz = function(quizId) {
+      showQuizMessage('Duplicate functionality coming soon!', 'error');
+    };
+
+    window.deleteQuiz = function(quizId) {
+      if (confirm(`Are you sure you want to delete the quiz "${quizId}"?`)) {
+        showQuizMessage('Delete functionality coming soon!', 'error');
+      }
+    };
+
+    // Modal functions (placeholders)
+    window.closeEditQuizModal = function() {
+      document.getElementById('editQuizModal').style.display = 'none';
+    };
+
+    function handleEditQuiz(event) {
+      event.preventDefault();
+      showQuizMessage('Edit save functionality coming soon!', 'error');
+    }
+
+    window.addEditQuestion = function() {
+      showQuizMessage('Add question in edit mode coming soon!', 'error');
+    };
+
+    // Make refreshQuizList available globally
+    window.refreshQuizList = refreshQuizList;
+
+    /* ========== Menu & Routing ========== */
+    function populateMenuItems(){
+      if (STATE.menuPopulated) return;
+      const list = document.getElementById('menuList');
+      const ph = document.getElementById('menuPlaceholder');
+      list.innerHTML = `
+        <li><button type="button" class="menu-link active" data-page="page-results">Results</button></li>
+        <li><button type="button" class="menu-link" data-page="page-analysis">Analysis</button></li>
+        <li><button type="button" class="menu-link" data-page="page-quizzes">Quizzes</button></li>
+        <li><button type="button" class="menu-link" data-page="page-users">Users</button></li>
+        <li><button type="button" class="menu-link" data-page="page-settings">Settings</button></li>
+        <li><button type="button" class="menu-link" data-page="page-logs">Logs</button></li>
+        <li><button type="button" class="menu-link" data-page="page-export">Export</button></li>
+      `;
+      if (ph) ph.style.display = 'none';
+      STATE.menuPopulated = true;
+    }
+    function clearMenuItems(){
+      const list = document.getElementById('menuList');
+      const ph = document.getElementById('menuPlaceholder');
+      if (list) list.innerHTML = '';
+      if (ph) ph.style.display = 'block';
+      STATE.menuPopulated = false;
+      setActivePage('page-results');
+      if (location.hash.toLowerCase().startsWith('#admin/')) location.hash = '#admin/results';
+    }
+    function setActivePage(id){
+      document.querySelectorAll('.admin-page').forEach(sec => sec.classList.toggle('active', sec.id === id));
+      document.querySelectorAll('.menu-link').forEach(a => a.classList.toggle('active', a.getAttribute('data-page') === id));
+      if (id === 'page-analysis') runAnalysis();
+      if (id === 'page-settings') loadPassThreshold();
+      if (id === 'page-quizzes') initializeQuizManagement();
+    }
+    function idToHash(id){
+      switch(id){
+        case 'page-results':   return '#admin/results';
+        case 'page-analysis':  return '#admin/analysis';
+        case 'page-quizzes':   return '#admin/quizzes';
+        case 'page-users':     return '#admin/users';
+        case 'page-settings':  return '#admin/settings';
+        case 'page-logs':      return '#admin/logs';
+        case 'page-export':    return '#admin/export';
+        default:               return '#admin/results';
+      }
+    }
+    function hashToPage(){
+      const h = (location.hash || '').toLowerCase();
+      if      (h.startsWith('#admin/analysis')) return 'page-analysis';
+      else if (h.startsWith('#admin/quizzes'))  return 'page-quizzes';
+      else if (h.startsWith('#admin/users'))    return 'page-users';
+      else if (h.startsWith('#admin/settings')) return 'page-settings';
+      else if (h.startsWith('#admin/logs'))     return 'page-logs';
+      else if (h.startsWith('#admin/export'))   return 'page-export';
+      return 'page-results';
+    }
+    function handleHashRoute(){
+      if (!STATE.tokenValid) { setActivePage('page-results'); return; }
+      setActivePage(hashToPage());
+    }
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.menu-link'); if (!btn) return;
+      const id = btn.getAttribute('data-page'); const want = idToHash(id);
+      if (location.hash !== want) location.hash = want; else handleHashRoute();
+    });
+    window.addEventListener('hashchange', handleHashRoute);
+
+    /* ========== Wire Up ========== */
+    $('#loadBtn')?.addEventListener('click', () => {
+      STATE.quizOptionsReady = false; hideMenu(); load(1); updateTokenStatus();
+    });
+
+    // Pager buttons: handle server or client-side pagination
+    $('#prevBtn')?.addEventListener('click', () => {
+      if (STATE.clientFilter) renderClientPage(STATE.clientFilter.page - 1);
+      else if (STATE.page > 1) load(STATE.page - 1);
+    });
+    $('#nextBtn')?.addEventListener('click', () => {
+      if (STATE.clientFilter) renderClientPage(STATE.clientFilter.page + 1);
+      else if (STATE.page < STATE.totalPages) load(STATE.page + 1);
+    });
+
+    $('#closeModal')?.addEventListener('click', () => showModal(false));
+    $('#backdrop')?.addEventListener('click', (e) => { if(e.target.id === 'backdrop') showModal(false); });
+
+    // Quiz dropdown open/close + outside click
+    const quizBtn = document.getElementById('quizFilterBtn');
+    const quizMenu = document.getElementById('quizMenu');
+    if (quizBtn && quizMenu) {
+      quizBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+      document.addEventListener('click', (e) => { if (!quizMenu.contains(e.target) && e.target !== quizBtn) hideMenu(); });
+    }
+
+    document.getElementById('exportBtn')?.addEventListener('click', exportAllCSV);
+    document.getElementById('exportPageBtn')?.addEventListener('click', exportAllCSV);
+
+    // Settings
+    document.getElementById('saveSettingsBtn')?.addEventListener('click', savePassThreshold);
+    document.getElementById('clearTokenBtn')?.addEventListener('click', () => {
+      const el = document.getElementById('adminToken');
+      if (el) el.value = '';
+      STATE.tokenValid = false;
+      clearMenuItems();
+      updateTokenStatus();
+    });
+
+    // Enter to load & token status
+    const tokenInput = document.getElementById('adminToken');
+    const loadBtn = document.getElementById('loadBtn');
+    if (tokenInput && loadBtn) {
+      tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); loadBtn.click(); } });
+      tokenInput.addEventListener('input', updateTokenStatus);
+      tokenInput.addEventListener('blur', updateTokenStatus);
+    }
+    const sinceInput = document.getElementById('since');
+    if (sinceInput && loadBtn) {
+      sinceInput.addEventListener('change', () => { STATE.quizOptionsReady = false; hideMenu(); load(1); });
+      sinceInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); load(1); } });
+    }
+
+    function updateTokenStatus(){
+      const el = document.getElementById('adminToken'); const s = document.getElementById('tokenStatus');
+      if (!s || !el) return; const v = (el.value || '').trim();
+      s.textContent = v ? `Token: ${'*'.repeat(Math.min(8, v.length))}…` : 'Token: not set';
+    }
+
+    // Initial state
+    document.addEventListener('DOMContentLoaded', () => { clearMenuItems(); loadPassThreshold(); updateTokenStatus(); handleHashRoute(); });
+  })();
+  </script>
+</body>
+</html>
