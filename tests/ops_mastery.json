@@ -1,0 +1,171 @@
+{
+  "test_id": "ops_mastery",
+  "title": "Quiz 2",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "text": "Which onePOS feature allows you to duplicate the configuration of an existing printer routing setup to a new one?",
+      "options": ["Copy Route", "Add Like", "Route Clone", "Duplicate Path"],
+      "answer": "Add Like",
+      "explanation": "The 'Add Like' feature copies settings from an existing configuration to speed up setup."
+    },
+    {
+      "id": "q2",
+      "type": "true_false",
+      "text": "In onePOS, a KDS can display orders from multiple terminals if routing is set up correctly.",
+      "answer": true,
+      "explanation": "Proper routing allows a KDS to receive orders from any linked terminal."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "text": "What happens if you assign the wrong sales category to a menu item in onePOS?",
+      "options": [
+        "The item will not print",
+        "Reports may show inaccurate category totals",
+        "The item will be hidden from all menus",
+        "The system will not allow you to save it"
+      ],
+      "answer": "Reports may show inaccurate category totals",
+      "explanation": "Misassigned sales categories don't block the item but cause incorrect reporting data."
+    },
+    {
+      "id": "q4",
+      "type": "true_false",
+      "text": "Price groups in onePOS can override the base price of items during certain time frames.",
+      "answer": true,
+      "explanation": "They are designed for scheduled pricing changes, such as happy hours or promotions."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "text": "Which onePOS hardware component typically connects via a serial COM port?",
+      "options": ["Thermal printer", "Barcode scanner", "Cash drawer", "Mag stripe reader"],
+      "answer": "Thermal printer",
+      "explanation": "Serial COM ports are most often used for thermal receipt printers like the SNBC S80."
+    },
+    {
+      "id": "q6",
+      "type": "true_false",
+      "text": "The Management Console in onePOS allows you to edit existing menu item prices without needing to restart the POS terminals.",
+      "answer": true,
+      "explanation": "Price changes take effect immediately and do not require a restart."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "text": "If a gift card is reported lost, what is the correct procedure in onePOS?",
+      "options": [
+        "Deactivate the card in the Gift Card Dashboard",
+        "Delete the card from the menu",
+        "Change the card's price group to 'Inactive'",
+        "Remove the card from sales categories"
+      ],
+      "answer": "Deactivate the card in the Gift Card Dashboard",
+      "explanation": "The dashboard is used to deactivate lost or stolen cards to prevent further use."
+    },
+    {
+      "id": "q8",
+      "type": "true_false",
+      "text": "Dual pricing in onePOS can only be applied to food items, not alcohol.",
+      "answer": false,
+      "explanation": "Dual pricing can be applied to any item, including alcohol, as long as it's configured correctly."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "text": "Which setting determines how orders are sorted on a Kitchen Display System screen?",
+      "options": ["Order Priority", "Screen Group", "Terminal Number", "Sales Category"],
+      "answer": "Screen Group",
+      "explanation": "Screen groups define how and where orders appear on KDS screens."
+    },
+    {
+      "id": "q10",
+      "type": "true_false",
+      "text": "In onePOS, COM port mismatches between hardware and Management Console settings can cause printing failures.",
+      "answer": true,
+      "explanation": "Both the COM port and baud rate must match for proper printer communication."
+    },
+    {
+      "id": "q11",
+      "type": "multiple_choice",
+      "text": "Which onePOS feature is best for offering a fixed-price meal with multiple courses?",
+      "options": ["Modifier Group", "Combo Builder", "Price Group", "Sales Category"],
+      "answer": "Combo Builder",
+      "explanation": "Combo Builder allows you to bundle items together for a set price."
+    },
+    {
+      "id": "q12",
+      "type": "true_false",
+      "text": "A terminal in onePOS can be assigned to multiple printer routes.",
+      "answer": true,
+      "explanation": "Multiple routes can be assigned to ensure items print at different stations as needed."
+    },
+    {
+      "id": "q13",
+      "type": "multiple_choice",
+      "text": "Which report would you use to check daily sales totals by category in onePOS?",
+      "options": ["Audit Trail", "Sales Summary by Category", "Item Detail Report", "Shift End Report"],
+      "answer": "Sales Summary by Category",
+      "explanation": "This report organizes daily sales totals by the sales category assigned to items."
+    },
+    {
+      "id": "q14",
+      "type": "true_false",
+      "text": "In onePOS, deleting an employee automatically removes their past timecard data.",
+      "answer": false,
+      "explanation": "Timecard history remains stored for record-keeping even if the employee is removed."
+    },
+    {
+      "id": "q15",
+      "type": "multiple_choice",
+      "text": "Which feature should be used to automatically apply a discount during a specific date range?",
+      "options": ["Price Group", "Modifier Group", "Tax Table", "Add Like"],
+      "answer": "Price Group",
+      "explanation": "Price Groups can be scheduled to apply alternate pricing or discounts for set periods."
+    },
+    {
+      "id": "q16",
+      "type": "true_false",
+      "text": "Changing an item’s sales category in onePOS will retroactively update all past reports for that item.",
+      "answer": false,
+      "explanation": "Reports reflect the sales category at the time of sale, not the current setting."
+    },
+    {
+      "id": "q17",
+      "type": "multiple_choice",
+      "text": "What is the correct baud rate setting for an SNBC S80 printer when configured in onePOS?",
+      "options": ["9600", "38400", "115200", "57600"],
+      "answer": "115200",
+      "explanation": "The SNBC S80 uses a baud rate of 115200 for optimal performance."
+    },
+    {
+      "id": "q18",
+      "type": "true_false",
+      "text": "The 'Gift Card Dashboard' can display the remaining balance and transaction history for a card.",
+      "answer": true,
+      "explanation": "The dashboard shows both balance and history for operator reference."
+    },
+    {
+      "id": "q19",
+      "type": "multiple_choice",
+      "text": "If a KDS screen is not showing orders, which is NOT a likely cause?",
+      "options": [
+        "Incorrect screen group assignment",
+        "Terminal routing misconfiguration",
+        "Paper jam in the printer",
+        "Network connection issue"
+      ],
+      "answer": "Paper jam in the printer",
+      "explanation": "A KDS is digital; printer paper jams do not affect order display."
+    },
+    {
+      "id": "q20",
+      "type": "true_false",
+      "text": "The 'Add Like' feature can be used when creating both employees and printer routings in onePOS.",
+      "answer": true,
+      "explanation": "It works in multiple areas to duplicate configurations quickly."
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>onePOS Knowledge Check</title>
+  <style>
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif; background:#f6f7f9; margin:0; padding:24px}
+    .wrap{max-width:920px;margin:0 auto}
+    .note{color:#374151}
+
+    /* --- Minimal Admin button --- */
+.admin-link {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 8px 12px;
+  border-radius: 999px;
+
+  background: rgba(15, 23, 42, 0.06);          /* subtle slate glass */
+  backdrop-filter: blur(6px);
+  color: #000;                               /* slate-900 */
+  text-decoration: none;
+  font: 600 12px/1 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+  letter-spacing: .2px;
+
+  box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+
+  opacity: .65;
+  transition: opacity .15s ease, transform .15s ease, background .15s ease;
+}
+
+.admin-link:hover,
+.admin-link:focus-visible {
+  opacity: 1;
+  transform: translateY(-1px);
+  background: rgba(14, 165, 233, 0.12);        /* hint of brand blue on hover */
+  outline: none;                                /* rely on custom focus ring below */
+}
+
+.admin-link:focus-visible {
+  box-shadow: 0 0 0 3px rgba(14,165,233,.25), 0 6px 18px rgba(0,0,0,.10);
+}
+
+.admin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0ea5e9;                          /* brandy blue accent */
+}
+
+/* Respect dark mode */
+@media (prefers-color-scheme: dark) {
+  .admin-link {
+    background: rgba(255,255,255,.06);
+    color: #fff;                                /* brighter in dark mode */
+    border-color: rgba(255,255,255,.10);
+  }
+}
+
+/* Don’t show on printouts */
+@media print { .admin-link { display: none !important; } }
+
+  </style>
+  <script src="/quiz-widget.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>onePOS Knowledge Check</h1>
+    <p class="note">After days or weeks of in-depth training, it’s time to put your knowledge to the test. The onePOS Challenge is your chance to demonstrate what you’ve learned, from product features to best practices. Pass it, and you’ll show you’re ready to take the system from classroom to real-world performance.</p>
+
+    <onepos-quiz
+      data-src="/api/tests/quiz_test"
+      data-post-results="/api/results"
+      require-otp
+      data-otp-endpoint="/api/otp/verify"
+      test-id="quiz_test"        <!-- add this line -->
+      shuffle
+      show-explanations>
+    </onepos-quiz>
+  </div>
+  <!-- Your main quiz HTML elements go here -->
+
+  <!-- Admin Button -->
+  <a href="/admin.html" class="admin-link" aria-label="Open Admin">
+    <span class="admin-dot" aria-hidden="true"></span>
+    Admin
+  </a>
+
+</body>
+</html>
+
+</body>
+</html>

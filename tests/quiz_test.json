@@ -1,0 +1,81 @@
+{
+  "test_id": "quiz_test",
+  "title": "The onePOS Operations Mastery Quiz",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "text": "In onePOS, which of the following settings must match between the SNBC S80 thermal printer and the Management Console for proper communication?",
+      "options": ["Baud rate", "Font size", "Paper width", "Logo image"],
+      "answer": "Baud rate",
+      "explanation": "The baud rate (e.g., 115200) must match exactly for the printer to function correctly."
+    },
+    {
+      "id": "q2",
+      "type": "true_false",
+      "text": "The 'Add Like' feature in onePOS is only available when creating new menu items.",
+      "answer": false,
+      "explanation": "It's available in multiple areas such as adding employees, menus, printer routings, and more."
+    },
+    {
+      "id": "q3",
+      "type": "multiple_choice",
+      "text": "Which onePOS feature allows you to set separate cash and credit card prices for the same item?",
+      "options": ["Dual Pricing", "Modifier Groups", "Combo Builder", "Tax Table Override"],
+      "answer": "Dual Pricing",
+      "explanation": "Dual pricing allows cash prices to be discounted and credit prices to include processing costs."
+    },
+    {
+      "id": "q4",
+      "type": "true_false",
+      "text": "When setting up a Kitchen Display System (KDS) in onePOS, you must assign it to a specific terminal number.",
+      "answer": true,
+      "explanation": "Yes—the KDS must be linked to a terminal for routing and communication to work."
+    },
+    {
+      "id": "q5",
+      "type": "multiple_choice",
+      "text": "In onePOS reporting, what is the primary purpose of assigning sales categories to items?",
+      "options": ["To control menu visibility", "To determine printer routing", "To filter and organize reports", "To adjust tax rates"],
+      "answer": "To filter and organize reports",
+      "explanation": "Sales categories help filter and organize data in reports and track performance by category."
+    },
+    {
+      "id": "q6",
+      "type": "true_false",
+      "text": "If a printer’s COM port setting in Windows Device Manager does not match the port assigned in onePOS, printing will still work as long as the baud rate matches.",
+      "answer": false,
+      "explanation": "Both the COM port and baud rate must match for proper communication."
+    },
+    {
+      "id": "q7",
+      "type": "multiple_choice",
+      "text": "Which of these actions can be performed from the onePOS Management Console?",
+      "options": ["Adjusting employee timecards", "Reprinting a guest check", "Changing the paper roll in a terminal", "Power cycling the KDS"],
+      "answer": "Adjusting employee timecards",
+      "explanation": "Timecard adjustments are done in the Management Console; the other actions are hardware-level tasks."
+    },
+    {
+      "id": "q8",
+      "type": "true_false",
+      "text": "In onePOS, a price group can be used to apply alternate pricing during happy hour.",
+      "answer": true,
+      "explanation": "Price groups allow for alternate pricing schedules such as happy hour or specials."
+    },
+    {
+      "id": "q9",
+      "type": "multiple_choice",
+      "text": "When configuring a thermal printer in onePOS, which 'Params' setting corresponds to 115200 baud, no parity, 8 data bits, and 1 stop bit?",
+      "options": ["115200,n,8,1", "9600,e,7,2", "115200,o,8,2", "38400,n,8,1"],
+      "answer": "115200,n,8,1",
+      "explanation": "These parameters define the communication protocol between the printer and terminal."
+    },
+    {
+      "id": "q10",
+      "type": "true_false",
+      "text": "The 'Gift Card Dashboard' in onePOS allows operators to check a customer's gift card balance without logging into the online ordering site.",
+      "answer": true,
+      "explanation": "The dashboard is a separate tool for viewing gift card information directly."
+    }
+  ]
+}
