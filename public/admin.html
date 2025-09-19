@@ -14,6 +14,7 @@
       --blue: #0ea5e9;
       --green: #16a34a;
       --red: #ef4444;
+      --yellow: #f59e0b;
     }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 24px; font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif; color: var(--text); background: var(--bg); }
@@ -21,10 +22,17 @@
     h1 { margin: 0 0 16px; font-size: 40px; letter-spacing: -0.02em; }
     .card { background: var(--card); border-radius: 16px; padding: 16px 18px; box-shadow: 0 10px 25px rgba(0,0,0,.08); }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    input, button { font: inherit; border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; color: var(--text); }
+    input, button, textarea, select { font: inherit; border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; color: var(--text); }
     input[type="date"] { min-width: 190px; }
+    textarea { min-height: 80px; resize: vertical; }
     button { cursor: pointer; box-shadow: 0 8px 18px rgba(0,0,0,.06); }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .primary { background: var(--blue); color: #fff; border: none; }
+    .secondary { background: #e5e7eb; color: var(--text); }
+    .success { background: var(--green); color: #fff; border: none; }
+    .danger { background: var(--red); color: #fff; border: none; }
+    .warning { background: var(--yellow); color: #fff; border: none; }
     .meta { color: var(--muted); font-size: 12px; }
     table { width: 100%; border-collapse: collapse; margin-top: 14px; }
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #e5e7eb; }
@@ -34,7 +42,7 @@
     #errorBox { display:none; margin-top:10px; padding:10px 12px; border-radius:10px; background:#fef2f2; color:#991b1b; border:1px solid #fee2e2; }
 
     /* Modal */
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
     .modal { width: min(920px, 96vw); max-height: 90vh; overflow: auto; background: #fff; border-radius: 16px; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
     .modal .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid #e5e7eb; color:#374151; }
@@ -102,6 +110,25 @@
 
     /* Settings layout */
     .settings-row { align-items: center; gap: 10px; }
+
+    /* Quiz Management Styles */
+    .quiz-tabs { display:flex; border-bottom:1px solid #e5e7eb; margin-bottom:20px; }
+    .quiz-tab { padding:12px 16px; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; font-weight:500; }
+    .quiz-tab.active { border-bottom-color: var(--blue); color: var(--blue); }
+    .quiz-tab-content { display: none; }
+    .quiz-tab-content.active { display: block; }
+    .quiz-item { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; }
+    .quiz-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .quiz-actions { display: flex; gap: 8px; }
+    .question-item { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; background: #fff; }
+    .question-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .option-input { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .option-input input[type="text"] { flex: 1; }
+    .hidden { display: none !important; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .stat { text-align: center; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px; }
+    .stat-value { font-size: 24px; font-weight: 700; color: var(--blue); }
+    .stat-label { font-size: 14px; color: var(--muted); margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -178,7 +205,80 @@
           <!-- QUIZZES -->
           <section id="page-quizzes" class="admin-page">
             <h2 style="margin:0 0 8px;">Quizzes</h2>
-            <p class="meta">Manage quiz content (coming soon).</p>
+            
+            <!-- Quiz Management Tabs -->
+            <div class="quiz-tabs">
+              <button class="quiz-tab active" data-tab="list">All Quizzes</button>
+              <button class="quiz-tab" data-tab="create">Create Quiz</button>
+            </div>
+
+            <!-- Quiz List Tab -->
+            <div class="quiz-tab-content active" id="quiz-list">
+              <!-- Stats Overview -->
+              <div class="stats">
+                <div class="stat">
+                  <div class="stat-value" id="totalQuizzes">0</div>
+                  <div class="stat-label">Total Quizzes</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value" id="totalQuestions">0</div>
+                  <div class="stat-label">Total Questions</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value" id="avgQuestionsPerQuiz">0</div>
+                  <div class="stat-label">Avg Questions/Quiz</div>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="row" style="margin-bottom:16px;">
+                <button class="primary" onclick="showCreateTab()">Create New Quiz</button>
+                <button class="secondary" onclick="refreshQuizList()">Refresh</button>
+                <span class="meta" id="quizListStatus">Loading...</span>
+              </div>
+
+              <!-- Error/Success Messages -->
+              <div id="quizErrorMsg" style="display:none; color:var(--red); font-size:14px; margin-bottom:16px;"></div>
+              <div id="quizSuccessMsg" style="display:none; color:var(--green); font-size:14px; margin-bottom:16px;"></div>
+
+              <!-- Quiz List -->
+              <div id="quizListContainer" style="display:grid; gap:16px;">
+                <!-- Quiz items will be loaded here -->
+              </div>
+            </div>
+
+            <!-- Create Quiz Tab -->
+            <div class="quiz-tab-content" id="quiz-create">
+              <form id="quizForm">
+                <div style="margin-bottom:16px;">
+                  <label style="display:block; margin-bottom:4px; font-weight:600;">Quiz ID</label>
+                  <input type="text" id="quizId" placeholder="e.g., server_basics" required style="width:100%; max-width:400px;">
+                  <div class="meta">Unique identifier (letters, numbers, underscores only)</div>
+                </div>
+                
+                <div style="margin-bottom:16px;">
+                  <label style="display:block; margin-bottom:4px; font-weight:600;">Quiz Title</label>
+                  <input type="text" id="quizTitle" placeholder="e.g., Server Fundamentals" required style="width:100%; max-width:400px;">
+                </div>
+                
+                <div style="margin-bottom:20px;">
+                  <label style="display:block; margin-bottom:4px; font-weight:600;">Description (Optional)</label>
+                  <textarea id="quizDescription" placeholder="Brief description of the quiz" style="width:100%; max-width:600px; min-height:80px; resize:vertical;"></textarea>
+                </div>
+                
+                <h3>Questions</h3>
+                <div id="questionsList">
+                  <!-- Questions will be added here -->
+                </div>
+                
+                <button type="button" onclick="addQuestion()" class="secondary" style="margin:16px 0;">Add Question</button>
+                
+                <div class="row" style="margin-top:20px;">
+                  <button type="submit" class="primary">Save Quiz</button>
+                  <button type="button" onclick="clearQuizForm()" class="secondary">Clear Form</button>
+                </div>
+              </form>
+            </div>
           </section>
 
           <!-- USERS -->
@@ -235,6 +335,46 @@
     </div>
   </div>
 
+  <!-- Edit Quiz Modal -->
+  <div id="editQuizModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="top">
+        <h2 id="editQuizModalTitle" style="margin:0;">Edit Quiz</h2>
+        <button onclick="closeEditQuizModal()" class="closeBtn" type="button">×</button>
+      </div>
+      <form id="editQuizForm">
+        <input type="hidden" id="editQuizOriginalId">
+        
+        <div style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:4px; font-weight:600;">Quiz ID</label>
+          <input type="text" id="editQuizId" required style="width:100%;">
+        </div>
+        
+        <div style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:4px; font-weight:600;">Quiz Title</label>
+          <input type="text" id="editQuizTitle" required style="width:100%;">
+        </div>
+        
+        <div style="margin-bottom:20px;">
+          <label style="display:block; margin-bottom:4px; font-weight:600;">Description</label>
+          <textarea id="editQuizDescription" style="width:100%; min-height:80px; resize:vertical;"></textarea>
+        </div>
+        
+        <h3>Questions</h3>
+        <div id="editQuestionsList">
+          <!-- Questions will be loaded here -->
+        </div>
+        
+        <button type="button" onclick="addEditQuestion()" class="secondary" style="margin:16px 0;">Add Question</button>
+        
+        <div class="row" style="margin-top:20px;">
+          <button type="submit" class="primary">Update Quiz</button>
+          <button type="button" onclick="closeEditQuizModal()" class="secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toggle back to Quiz -->
   <a href="/" class="admin-link" aria-label="Back to Quiz">
     <span class="admin-label">Quiz</span>
@@ -269,6 +409,17 @@
       let year = String(yy).length === 2 ? normalizeYear2(parseInt(yy,10)) : parseInt(yy,10);
       if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || year < 1900 || year > 2099) return '';
       return toISODate(year, mm, dd);
+    }
+
+    /* Helper for concurrency limiting */
+    async function mapWithConcurrency(array, asyncFn, concurrency = 5) {
+      const results = [];
+      for (let i = 0; i < array.length; i += concurrency) {
+        const batch = array.slice(i, i + concurrency);
+        const batchResults = await Promise.all(batch.map(asyncFn));
+        results.push(...batchResults);
+      }
+      return results;
     }
 
     /* Local calendar helpers (fix UTC bleed) */
@@ -306,548 +457,4 @@
       let v = parseInt((inp?.value || '').trim(), 10);
       if (!Number.isFinite(v)) { if(status) status.textContent = 'Enter a number 1–100.'; return; }
       v = Math.max(1, Math.min(100, v));
-      localStorage.setItem(SETTINGS_KEY_PASS, String(v));
-      STATE.passThresholdPct = v;
-      if (status) { status.textContent = 'Saved ✓'; setTimeout(()=> status.textContent = ' ', 1500); }
-      if (STATE.tokenValid) runAnalysis();
-    }
-    const getPassThreshold = () => STATE.passThresholdPct || 80;
-
-    /* ========== State ========== */
-    const STATE = {
-      page: 1, pageSize: 20, totalPages: 1, lastResults: [],
-      quizOptionsReady: false, tokenValid:false, menuPopulated:false,
-      passThresholdPct:80,
-      clientFilter: null // { items:[], page:1, totalPages:N } when title filter is active
-    };
-    let CURRENT_TOKEN = '';
-
-    function showError(msg){ const box = $('#errorBox'); box.textContent = msg || 'Something went wrong.'; box.style.display = 'block'; }
-    function clearError(){ const box = $('#errorBox'); box.textContent = ''; box.style.display = 'none'; }
-
-    /* ========== Fetch helpers ========== */
-    async function fetchPageSummaries({page, pageSize, since, token}) {
-      const qs = new URLSearchParams({ page, page_size: pageSize, ts: Date.now().toString() });
-      if (since) qs.set('since', since);
-      const res = await fetch('/api/admin/get-results?' + qs.toString(), { cache: 'no-store', headers: { 'x-admin-token': token } });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-      return json;
-    }
-    async function fetchAllSummaries(token){
-      const since = getSelectedDateISO() || '';
-      const first = await fetchPageSummaries({ page: 1, pageSize: 200, since, token });
-      let all = Array.isArray(first.results) ? first.results.slice() : [];
-      const totalPages = first.total_pages || 1;
-      for (let p = 2; p <= totalPages; p++){
-        const next = await fetchPageSummaries({ page: p, pageSize: 200, since, token });
-        if (Array.isArray(next.results)) all.push(...next.results);
-      }
-      return { all, since };
-    }
-    async function fetchAttemptDetail(id){
-      const res = await fetch('/api/admin/get-result?id=' + encodeURIComponent(id), { cache: 'no-store', headers: { 'x-admin-token': CURRENT_TOKEN } });
-      const j = await res.json();
-      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Failed attempt fetch');
-      return j.result;
-    }
-
-    /* ========== Quiz filter dropdown ========== */
-    function buildQuizMenuFrom(all){
-      const menu = document.getElementById('quizMenu'); if (!menu) return;
-      menu.innerHTML = `
-        <div id="quizItems"></div>
-        <div class="quiz-menu-actions">
-          <button class="btn-link" id="selectAllBtn" type="button">Select all</button>
-          <button class="btn-link" id="clearAllBtn" type="button">Clear</button>
-          <button class="btn-link" id="applyFilterBtn" type="button">Apply</button>
-        </div>
-      `;
-      const itemsWrap = document.getElementById('quizItems');
-      const titles = Array.from(new Set((all || []).map(r => r.title || '').filter(Boolean))).sort((a,b)=>a.localeCompare(b));
-      titles.forEach((t, i) => {
-        const id = `qopt_${i}`;
-        const row = document.createElement('label');
-        row.className = 'quiz-opt'; row.setAttribute('role','option');
-        row.innerHTML = `<input type="checkbox" name="quizTitle" value="${t.replace(/"/g,'&quot;')}" id="${id}"><span>${t}</span>`;
-        itemsWrap.appendChild(row);
-      });
-      $('#selectAllBtn').addEventListener('click', () => { menu.querySelectorAll('input[name="quizTitle"]').forEach(cb => cb.checked = true); });
-      $('#clearAllBtn').addEventListener('click', () => { menu.querySelectorAll('input[name="quizTitle"]').forEach(cb => cb.checked = false); });
-      $('#applyFilterBtn').addEventListener('click', () => { updateFilterButtonLabel(); hideMenu(); load(1); });
-      updateFilterButtonLabel();
-    }
-    function getSelectedTitles(){ const menu = document.getElementById('quizMenu'); if (!menu) return []; return Array.from(menu.querySelectorAll('input[name="quizTitle"]:checked')).map(cb => cb.value); }
-    function updateFilterButtonLabel(){
-      const label = document.getElementById('quizFilterLabel');
-      const total = document.querySelectorAll('#quizMenu input[name="quizTitle"]').length;
-      const selected = getSelectedTitles();
-      if (selected.length === 0 || selected.length === total) label.textContent = 'All quizzes';
-      else if (selected.length === 1) label.textContent = selected[0];
-      else label.textContent = `${selected.length} selected`;
-    }
-    function toggleMenu(){
-      const btn = document.getElementById('quizFilterBtn'); const menu = document.getElementById('quizMenu');
-      const open = menu.style.display === 'block'; if (open) { hideMenu(); } else { menu.style.display = 'block'; btn.setAttribute('aria-expanded','true'); }
-    }
-    function hideMenu(){
-      const btn = document.getElementById('quizFilterBtn'); const menu = document.getElementById('quizMenu');
-      if (!menu || !btn) return; menu.style.display = 'none'; btn.setAttribute('aria-expanded','false');
-    }
-
-    /* ========== Table rendering helpers ========== */
-    function renderTableRows(rows){
-      const tbody = $('#tbl tbody'); tbody.innerHTML = '';
-      rows.forEach(r => {
-        const correctTotal = (Number.isFinite(r.correct) && Number.isFinite(r.total)) ? `${r.correct}/${r.total}` : '';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${fmtUS(r.received_at)}</td>
-          <td>${r.user_name || ''}</td>
-          <td>${(r.scorePct ?? '')}</td>
-          <td>${correctTotal}</td>
-          <td>${r.title || ''}</td>
-          <td><button class="primary detailsBtn" type="button" data-id="${r.id}">View</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-      document.querySelectorAll('.detailsBtn').forEach(btn => { btn.addEventListener('click', () => openDetails(btn.getAttribute('data-id'))); });
-    }
-
-    function enterClientPagedMode(items){
-      STATE.clientFilter = {
-        items: items.slice(),
-        page: 1,
-        totalPages: Math.max(1, Math.ceil(items.length / STATE.pageSize))
-      };
-      renderClientPage(1);
-    }
-    function clearClientPagedMode(){ STATE.clientFilter = null; }
-
-    function renderClientPage(page){
-      if (!STATE.clientFilter) return;
-      const items = STATE.clientFilter.items;
-      const totalPages = Math.max(1, Math.ceil(items.length / STATE.pageSize));
-      const p = Math.min(Math.max(1, page), totalPages);
-      STATE.clientFilter.page = p;
-      STATE.clientFilter.totalPages = totalPages;
-
-      const start = (p - 1) * STATE.pageSize;
-      const slice = items.slice(start, start + STATE.pageSize);
-      renderTableRows(slice);
-
-      $('#meta').textContent = `${items.length} total attempt(s) • showing ${slice.length} on this page after filter`;
-      $('#pageInfo').textContent = `Page ${p} of ${totalPages}`;
-      $('#prevBtn').disabled = p <= 1;
-      $('#nextBtn').disabled = p >= totalPages;
-    }
-
-    /* ========== Results page ========== */
-    async function load(pageOverride){
-      clearError();
-      const token = $('#adminToken') ? $('#adminToken').value.trim() : '';
-      CURRENT_TOKEN = token;
-
-      const singleDay = getSelectedDateISO(); // '' or YYYY-MM-DD
-      const selectedTitles = getSelectedTitles();
-
-      // --- Single-day mode (local calendar day) ---
-      if (singleDay) {
-        let summaries;
-        try {
-          const { all } = await fetchAllSummaries(token);
-          summaries = all;
-        } catch(e){
-          console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load results.'); return;
-        }
-        STATE.tokenValid = true; populateMenuItems();
-
-        if (!STATE.quizOptionsReady) {
-          try { buildQuizMenuFrom(summaries); STATE.quizOptionsReady = true; } catch(e){ console.warn('Could not build quiz list', e); }
-        }
-
-        let filtered = summaries.filter(r => dayKeyLocal(r.received_at) === singleDay);
-        if (selectedTitles.length){
-          const set = new Set(selectedTitles);
-          filtered = filtered.filter(r => set.has(r.title || ''));
-        }
-
-        STATE.lastResults = filtered.slice();
-        renderTableRows(filtered);
-
-        $('#meta').textContent = `${filtered.length} attempt(s) • date: ${singleDay}`;
-        $('#pageInfo').textContent = `Single day`;
-        $('#prevBtn').disabled = true; $('#nextBtn').disabled = true;
-
-        if (!location.hash) location.hash = '#admin/results';
-        handleHashRoute();
-        if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
-        return;
-      }
-
-      // --- Title filter active? -> fetch ALL, client-side paginate ---
-      if (selectedTitles.length){
-        try{
-          const { all } = await fetchAllSummaries(token);
-          STATE.tokenValid = true; populateMenuItems();
-          if (!STATE.quizOptionsReady){ try { buildQuizMenuFrom(all); STATE.quizOptionsReady = true; } catch(e){} }
-
-          const set = new Set(selectedTitles);
-          const filtered = all.filter(r => set.has(r.title || ''));
-          STATE.lastResults = filtered.slice();
-          enterClientPagedMode(filtered);
-        }catch(e){
-          console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load filtered results.');
-        }
-        if (!location.hash) location.hash = '#admin/results';
-        handleHashRoute();
-        if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
-        return;
-      } else {
-        // No title filter -> server pagination
-        clearClientPagedMode();
-      }
-
-      // --- Normal paged mode via server ---
-      let res, json;
-      try {
-        const qs = new URLSearchParams({ page: (pageOverride || STATE.page || 1), page_size: STATE.pageSize, ts: Date.now().toString() });
-        res = await fetch('/api/admin/get-results?' + qs.toString(), { cache: 'no-store', headers: { 'x-admin-token': token } });
-        json = await res.json();
-      } catch (e) { console.error(e); STATE.tokenValid=false; clearMenuItems(); showError('Failed to load results.'); return; }
-      if (!res.ok || !json?.ok) { STATE.tokenValid=false; clearMenuItems(); showError(json?.error || `Request failed (${res.status})`); return; }
-
-      STATE.tokenValid=true; populateMenuItems();
-      STATE.page = json.page || 1; STATE.pageSize = json.page_size || 20; STATE.totalPages = json.total_pages || 1;
-      STATE.lastResults = Array.isArray(json.results) ? json.results : [];
-
-      if (!STATE.quizOptionsReady) {
-        try { const { all } = await fetchAllSummaries(token); buildQuizMenuFrom(all); STATE.quizOptionsReady = true; }
-        catch(e){ console.warn('Could not build quiz list', e); }
-      }
-
-      renderTableRows(STATE.lastResults);
-
-      $('#meta').textContent = `${json.count || 0} total attempt(s) • showing ${STATE.lastResults.length} on this page after filter`;
-      $('#pageInfo').textContent = `Page ${STATE.page} of ${STATE.totalPages}`;
-      $('#prevBtn').disabled = STATE.page <= 1; $('#nextBtn').disabled = STATE.page >= STATE.totalPages;
-
-      if (!location.hash) location.hash = '#admin/results';
-      handleHashRoute();
-      if (document.getElementById('page-analysis')?.classList.contains('active')) runAnalysis();
-    }
-
-    // Modal
-    async function openDetails(id){
-      try{
-        const res = await fetch('/api/admin/get-result?id=' + encodeURIComponent(id), { cache: 'no-store', headers: { 'x-admin-token': CURRENT_TOKEN } });
-        const j = await res.json();
-        if(!res.ok || !j?.ok){ showError(j?.error || 'Failed to load attempt'); return; }
-        const a = j.result;
-        $('#mdTitle').textContent = a.title || 'Attempt Details';
-        $('#mdMeta').innerHTML = `
-          <span class="chip">User: <strong>${a.user_name || '—'}</strong></span>
-          <span class="chip">When: <strong>${fmtUS(a.received_at)}</strong></span>
-          <span class="chip">Score: <strong>${a.scorePct ?? ''}%</strong></span>
-          <span class="chip">Correct/Total: <strong>${a.correct}/${a.total}</strong></span>
-        `;
-        const rows = Array.isArray(a.rows) ? a.rows : [];
-        const body = rows.map(r => `
-          <div class="qbox">
-            <div class="headerRow">
-              <span class="pill ${r.is_correct ? 'ok' : 'bad'}">${r.is_correct ? 'Correct' : 'Incorrect'}</span>
-              <span class="muted">Q${r.index ?? ''}${r.category ? ' • ' + r.category : ''}</span>
-            </div>
-            <h3 class="qtitle">${r.question}</h3>
-            <div class="muted"><strong>Your answer:</strong> ${r.user_answer || '<em>Blank</em>'}</div>
-            <div class="muted"><strong>Correct answer:</strong> ${r.correct_answer || ''}</div>
-          </div>
-        `).join('');
-        $('#mdBody').innerHTML = body || '<div class="muted">No per-question data was saved for this attempt.</div>';
-        showModal(true);
-      } catch(e){ console.error(e); showError('Error opening details.'); }
-    }
-    function showModal(on){ const bd = $('#backdrop'); if(on){ bd.style.display='flex'; bd.setAttribute('aria-hidden','false'); } else { bd.style.display='none'; bd.setAttribute('aria-hidden','true'); } }
-
-    // Export (respects single-day + quiz filters; uses local-day filter)
-    async function exportAllCSV(){
-      clearError();
-      const btn = document.getElementById('exportBtn') || document.getElementById('exportPageBtn');
-      const token = $('#adminToken') ? $('#adminToken').value.trim() : '';
-      if (!token) { showError('Enter your admin token, then click Export.'); return; }
-      const prevTxt = btn.textContent; btn.textContent = 'Exporting...'; btn.disabled = true;
-      try{
-        const { all: summaries } = await fetchAllSummaries(token);
-        const selectedTitles = getSelectedTitles();
-        const singleDay = getSelectedDateISO();
-
-        let filtered = summaries;
-        if (singleDay) filtered = filtered.filter(r => dayKeyLocal(r.received_at) === singleDay);
-        if (selectedTitles.length){ const set = new Set(selectedTitles); filtered = filtered.filter(r => set.has(r.title || '')); }
-        if (!filtered.length){ showError('No results match the current filters.'); return; }
-
-        const attempts = await mapWithConcurrency(filtered, (s) => fetchAttemptDetail(s.id).catch(() => ({ ...s, rows: [] })), 10);
-        const maxQ = attempts.reduce((m,a)=> Math.max(m, Array.isArray(a.rows) ? a.rows.length : 0), 0);
-        const header = ['date','user','score','total','title', ...Array.from({length:maxQ}, (_,i)=>`Q${i+1}`)];
-        const lines = [ header.map(csvEscape).join(',') ];
-        attempts.forEach(a => {
-          const date = fmtISO(a.received_at);
-          const user = a.user_name || '';
-          const score = Number.isFinite(a.correct) ? a.correct : '';
-          const total = Number.isFinite(a.total) ? a.total : '';
-          const title = a.title || '';
-          const qCells = [];
-          for (let i=0; i<maxQ; i++){
-            const r = (a.rows && a.rows[i]) ? a.rows[i] : null;
-            qCells.push(csvEscape((() => {
-              if (!r) return '';
-              const t = (r.type || '').toLowerCase();
-              if (t === 'true_false'){
-                const v = String(r.user_answer ?? '').toLowerCase();
-                if (v === 'true' || v === 't') return 'T';
-                if (v === 'false' || v === 'f') return 'F';
-                return '';
-              }
-              if (Number.isFinite(r.answer_index)) return String.fromCharCode(65 + r.answer_index);
-              if (typeof r.answer_letter === 'string') return r.answer_letter.toUpperCase();
-              return r.user_answer || '';
-            })()));
-          }
-          lines.push([csvEscape(date), csvEscape(user), csvEscape(score), csvEscape(total), csvEscape(title), ...qCells].join(','));
-        });
-        const csv = lines.join('\n'); const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
-        const stamp = new Date().toISOString().slice(0,10);
-        const chosen = (getSelectedTitles()).map(s=>s.replace(/[^a-z0-9_-]+/gi,'-')).join('+');
-        const dayPart = singleDay ? `_on-${singleDay}` : '';
-        const name = `quiz_export_${stamp}${dayPart}${chosen ? `_titles-${chosen}` : ''}.csv`;
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-      } catch(err){ console.error(err); showError('Failed to export CSV.'); }
-      finally { btn.textContent = prevTxt; btn.disabled = false; }
-    }
-
-    /* ========== Analysis (KPIs) ========== */
-    function summarizeAttempts(attempts, passPct){
-      const scores = attempts.map(a => Number(a.scorePct)).filter(x => Number.isFinite(x));
-      const durations = attempts.map(a => Number(a.duration_ms)).filter(x => Number.isFinite(x) && x > 0);
-      const users = attempts.map(a => (a.user_name || '').trim()).filter(Boolean);
-      const uniqueUsers = new Set(users);
-      const byUserTitle = new Map();
-      attempts.forEach(a => {
-        const key = `${(a.user_name||'').trim()}|${a.title||''}`;
-        const arr = byUserTitle.get(key) || [];
-        arr.push(a);
-        byUserTitle.set(key, arr);
-      });
-      let firstTries = 0, firstTryPasses = 0, retakePairs = 0;
-      byUserTitle.forEach(arr => {
-        arr.sort((x,y) => new Date(x.received_at) - new Date(y.received_at));
-        const first = arr[0];
-        if (first && Number.isFinite(first.scorePct)) {
-          firstTries++;
-          if (first.scorePct >= passPct) firstTryPasses++;
-        }
-        if (arr.length >= 2) retakePairs++;
-      });
-
-      const completed = attempts.length;
-      const passCount = attempts.filter(a => Number.isFinite(a.scorePct) && a.scorePct >= passPct).length;
-
-      return {
-        completed,
-        passRate: completed ? passCount / completed : null,
-        avgScore: mean(scores),
-        p90Score: quantile(scores, 0.90),
-        medianTimeMs: durations.length ? median(durations) : null,
-        firstTryPassRate: firstTries ? (firstTryPasses / firstTries) : null,
-        retakeRate: byUserTitle.size ? (retakePairs / byUserTitle.size) : null,
-        uniqueUsers: uniqueUsers.size
-      };
-    }
-    function renderKPIs(k){
-      const el = document.getElementById('kpiGrid');
-      const fmtMs = (ms) => {
-        if (!Number.isFinite(ms)) return '—';
-        const s = Math.round(ms/1000);
-        const m = Math.floor(s/60), r = s % 60;
-        return m ? `${m}m ${r}s` : `${r}s`;
-      };
-      el.innerHTML = `
-        <div class="kpi"><div class="label">Completions</div><div class="value">${k.completed ?? 0}</div><div class="sub">Attempts</div></div>
-        <div class="kpi"><div class="label">Pass Rate</div><div class="value">${k.passRate==null?'—':(Math.round(k.passRate*1000)/10)+'%'}</div><div class="sub">Current filter</div></div>
-        <div class="kpi"><div class="label">Avg Score</div><div class="value">${k.avgScore==null?'—':(Math.round(k.avgScore*10)/10)+'%'}</div><div class="sub">Across attempts</div></div>
-        <div class="kpi"><div class="label">P90 Score</div><div class="value">${k.p90Score==null?'—':(Math.round(k.p90Score*10)/10)+'%'}</div><div class="sub">High performers</div></div>
-        <div class="kpi"><div class="label">Median Time</div><div class="value">${fmtMs(k.medianTimeMs)}</div><div class="sub">If duration_ms recorded</div></div>
-        <div class="kpi"><div class="label">First-try Pass</div><div class="value">${k.firstTryPassRate==null?'—':(Math.round(k.firstTryPassRate*1000)/10)+'%'}</div><div class="sub">Earliest attempt per user×quiz</div></div>
-        <div class="kpi"><div class="label">Retake Rate</div><div class="value">${k.retakeRate==null?'—':(Math.round(k.retakeRate*1000)/10)+'%'}</div><div class="sub">Users with ≥2 attempts (per quiz)</div></div>
-        <div class="kpi"><div class="label">Unique Users</div><div class="value">${k.uniqueUsers ?? 0}</div><div class="sub">In current filter</div></div>
-      `;
-    }
-    function runAnalysis(){
-      if (!STATE.tokenValid){ showError('Enter your admin token and click Load first.'); return; }
-      clearError();
-
-      const token = CURRENT_TOKEN;
-      const singleDay = getSelectedDateISO(); // '' or YYYY-MM-DD
-
-      fetchAllSummaries(token)
-        .then(({ all }) => {
-          const selectedTitles = getSelectedTitles();
-          let filtered = selectedTitles.length
-            ? all.filter(r => selectedTitles.includes(r.title || ''))
-            : all;
-
-          // Honor single-day filter (LOCAL calendar day)
-          if (singleDay) {
-            filtered = filtered.filter(r => dayKeyLocal(r.received_at) === singleDay);
-          }
-
-          const passPct = getPassThreshold();
-          const kpis = summarizeAttempts(filtered, passPct);
-          renderKPIs(kpis);
-
-          // Summary string
-          const days = singleDay
-            ? 1
-            : new Set(filtered.map(a => dayKeyLocal(a.received_at)).filter(Boolean)).size;
-
-          const summary = singleDay
-            ? `${filtered.length} attempt(s) on ${singleDay}. Pass threshold: ${passPct}%`
-            : `${filtered.length} attempt(s) across ${days} day(s). Pass threshold: ${passPct}%`;
-
-          const sumEl = document.getElementById('analysisSummary');
-          if (sumEl) sumEl.textContent = summary;
-        })
-        .catch(err => {
-          console.error(err);
-          showError('Failed to compute analytics.');
-        });
-    }
-
-    /* ========== Menu & Routing ========== */
-    function populateMenuItems(){
-      if (STATE.menuPopulated) return;
-      const list = document.getElementById('menuList');
-      const ph = document.getElementById('menuPlaceholder');
-      list.innerHTML = `
-        <li><button type="button" class="menu-link active" data-page="page-results">Results</button></li>
-        <li><button type="button" class="menu-link" data-page="page-analysis">Analysis</button></li>
-        <li><button type="button" class="menu-link" data-page="page-quizzes">Quizzes</button></li>
-        <li><button type="button" class="menu-link" data-page="page-users">Users</button></li>
-        <li><button type="button" class="menu-link" data-page="page-settings">Settings</button></li>
-        <li><button type="button" class="menu-link" data-page="page-logs">Logs</button></li>
-        <li><button type="button" class="menu-link" data-page="page-export">Export</button></li>
-      `;
-      if (ph) ph.style.display = 'none';
-      STATE.menuPopulated = true;
-    }
-    function clearMenuItems(){
-      const list = document.getElementById('menuList');
-      const ph = document.getElementById('menuPlaceholder');
-      if (list) list.innerHTML = '';
-      if (ph) ph.style.display = 'block';
-      STATE.menuPopulated = false;
-      setActivePage('page-results');
-      if (location.hash.toLowerCase().startsWith('#admin/')) location.hash = '#admin/results';
-    }
-    function setActivePage(id){
-      document.querySelectorAll('.admin-page').forEach(sec => sec.classList.toggle('active', sec.id === id));
-      document.querySelectorAll('.menu-link').forEach(a => a.classList.toggle('active', a.getAttribute('data-page') === id));
-      if (id === 'page-analysis') runAnalysis();
-      if (id === 'page-settings') loadPassThreshold();
-    }
-    function idToHash(id){
-      switch(id){
-        case 'page-results':   return '#admin/results';
-        case 'page-analysis':  return '#admin/analysis';
-        case 'page-quizzes':   return '#admin/quizzes';
-        case 'page-users':     return '#admin/users';
-        case 'page-settings':  return '#admin/settings';
-        case 'page-logs':      return '#admin/logs';
-        case 'page-export':    return '#admin/export';
-        default:               return '#admin/results';
-      }
-    }
-    function hashToPage(){
-      const h = (location.hash || '').toLowerCase();
-      if      (h.startsWith('#admin/analysis')) return 'page-analysis';
-      else if (h.startsWith('#admin/quizzes'))  return 'page-quizzes';
-      else if (h.startsWith('#admin/users'))    return 'page-users';
-      else if (h.startsWith('#admin/settings')) return 'page-settings';
-      else if (h.startsWith('#admin/logs'))     return 'page-logs';
-      else if (h.startsWith('#admin/export'))   return 'page-export';
-      return 'page-results';
-    }
-    function handleHashRoute(){
-      if (!STATE.tokenValid) { setActivePage('page-results'); return; }
-      setActivePage(hashToPage());
-    }
-    document.addEventListener('click', (e) => {
-      const btn = e.target.closest('.menu-link'); if (!btn) return;
-      const id = btn.getAttribute('data-page'); const want = idToHash(id);
-      if (location.hash !== want) location.hash = want; else handleHashRoute();
-    });
-    window.addEventListener('hashchange', handleHashRoute);
-
-    /* ========== Wire Up ========== */
-    $('#loadBtn')?.addEventListener('click', () => {
-      STATE.quizOptionsReady = false; hideMenu(); load(1); updateTokenStatus();
-    });
-
-    // Pager buttons: handle server or client-side pagination
-    $('#prevBtn')?.addEventListener('click', () => {
-      if (STATE.clientFilter) renderClientPage(STATE.clientFilter.page - 1);
-      else if (STATE.page > 1) load(STATE.page - 1);
-    });
-    $('#nextBtn')?.addEventListener('click', () => {
-      if (STATE.clientFilter) renderClientPage(STATE.clientFilter.page + 1);
-      else if (STATE.page < STATE.totalPages) load(STATE.page + 1);
-    });
-
-    $('#closeModal')?.addEventListener('click', () => showModal(false));
-    $('#backdrop')?.addEventListener('click', (e) => { if(e.target.id === 'backdrop') showModal(false); });
-
-    // Quiz dropdown open/close + outside click
-    const quizBtn = document.getElementById('quizFilterBtn');
-    const quizMenu = document.getElementById('quizMenu');
-    quizBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
-    document.addEventListener('click', (e) => { if (!quizMenu.contains(e.target) && e.target !== quizBtn) hideMenu(); });
-
-    document.getElementById('exportBtn')?.addEventListener('click', exportAllCSV);
-    document.getElementById('exportPageBtn')?.addEventListener('click', exportAllCSV);
-
-    // Settings
-    document.getElementById('saveSettingsBtn')?.addEventListener('click', savePassThreshold);
-    document.getElementById('clearTokenBtn')?.addEventListener('click', () => {
-      const el = document.getElementById('adminToken');
-      if (el) el.value = '';
-      STATE.tokenValid = false;
-      clearMenuItems();
-      updateTokenStatus();
-    });
-
-    // Enter to load & token status
-    const tokenInput = document.getElementById('adminToken');
-    const loadBtn = document.getElementById('loadBtn');
-    if (tokenInput && loadBtn) {
-      tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); loadBtn.click(); } });
-      tokenInput.addEventListener('input', updateTokenStatus);
-      tokenInput.addEventListener('blur', updateTokenStatus);
-    }
-    const sinceInput = document.getElementById('since');
-    if (sinceInput && loadBtn) {
-      sinceInput.addEventListener('change', () => { STATE.quizOptionsReady = false; hideMenu(); load(1); });
-      sinceInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); load(1); } });
-    }
-
-    function updateTokenStatus(){
-      const el = document.getElementById('adminToken'); const s = document.getElementById('tokenStatus');
-      if (!s || !el) return; const v = (el.value || '').trim();
-      s.textContent = v ? `Token: ${'*'.repeat(Math.min(8, v.length))}…` : 'Token: not set';
-    }
-
-    // Initial state
-    document.addEventListener('DOMContentLoaded', () => { clearMenuItems(); loadPassThreshold(); updateTokenStatus(); handleHashRoute(); });
-  })();
-  </script>
-</body>
-</html>
+      localStorage.setItem(
